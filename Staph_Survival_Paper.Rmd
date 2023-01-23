@@ -1,0 +1,239 @@
+---
+title: "Staph-Survival-Paper"
+author: "Maria Steadmon"
+date: "1/22/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Statistics and analysis for the manuscript titled "Comparing the survival and persistence of *Staphylococcus aureus* in environmental waters of different turbidity"
+
+**Libraries required**
+
+```{r}
+library(plyr)
+library(ggplot2)
+library(MuMIn)
+library(MASS)
+library(car)
+library(effects)
+```
+
+**Data required**
+
+```{r}
+
+setwd("/Users/msteadd/Documents/") #change to your own working directory of where the data is stored
+dat=read.csv("Staph_Survival_Data_Raw.csv", na.strings = ".", header=TRUE) 
+head(dat)
+dat$Site=as.factor(dat$Site)
+```
+
+**Environmental (initial) concentrations of *S. aureus***
+
+```{r}
+#Subset
+initial_data <- subset(dat,Time_day %in% c("0"))
+```
+
+**Metadata for initial concentrations of *S. aureus*** \newline
+
+**Freshwater**
+
+```{r}
+#initial_data
+fresh_initial_data___ <- subset(initial_data,Salinity %in% c("Fresh"))
+
+initial_data_averages_fresh <- ddply(fresh_initial_data___, .(Turbid_Level), summarize, avg=mean(Staph_CFU_100mL), Median = median(Staph_CFU_100mL), 
+                              min=min(Staph_CFU_100mL),
+                              max=max(Staph_CFU_100mL),
+                              IQR = IQR(Staph_CFU_100mL),
+                            SE=sd(Staph_CFU_100mL)/sqrt(length(Staph_CFU_100mL)),
+                            SD = sd(Staph_CFU_100mL))
+initial_data_averages_fresh
+```
+
+**Brackish water**
+
+```{r}
+brackish_initial_data___ <- subset(initial_data,Salinity %in% c("Brackish"))
+
+initial_data_averages_brackish <- ddply(brackish_initial_data___, .(Turbid_Level), summarize, avg=mean(Staph_CFU_100mL), Median = median(Staph_CFU_100mL), 
+                              min=min(Staph_CFU_100mL),
+                              max=max(Staph_CFU_100mL),
+                              IQR = IQR(Staph_CFU_100mL),
+                            SE=sd(Staph_CFU_100mL)/sqrt(length(Staph_CFU_100mL)),
+                            SD = sd(Staph_CFU_100mL))
+initial_data_averages_brackish
+```
+
+**Means test for comparing *S. aureus* concentrations**
+
+```{r}
+initial_data$Turbid_Level=as.factor(initial_data$Turbid_Level)
+initial_data$Salinity=as.factor(initial_data$Salinity)
+initial_data$Sal_Turb=as.factor(initial_data$Sal_Turb)
+
+
+kruskal.test(initial_data$Staph_CFU_100mL~initial_data$Sal_Turb)
+pairwise.wilcox.test(initial_data$Staph_CFU_100mL,initial_data$Sal_Turb, p.adjust.method = "BH")
+
+```
+
+**Figure 1**
+
+```{r}
+
+my_y_title_staph_<-expression(paste(italic("S. aureus"), " CFU/100 mL"))
+
+grayscale=c("black","#999999")
+
+  Figure1=ggplot(initial_data, aes(x=Turbid_Level,y=Staph_CFU_100mL,color=Salinity))+
+  geom_boxplot()+theme_bw()+
+  #geom_point()+
+  theme(panel.grid=element_blank(), legend.position="top", text=element_text(size=20))+ 
+    xlab("Turbidity Level")+
+  ylab(my_y_title_staph_)+#scale_fill_manual(name="Turbidity Level",values=cbPalette)+
+ # scale_color_manual(values=cbPalette)+
+      coord_cartesian(ylim=c(0, 13000))+
+    scale_fill_grey()+
+    scale_color_manual(name="Salinity",values=grayscale)#+
+  #facet_wrap(~ salinity, scales="free")#, nrow=1, ncol=2)
+  Figure1
+```
+
+**Models of environmental concentrations of *S. aureus***
+
+```{r}
+#Full model
+model_initial_data=lm(log(Staph_CFU_100mL+1)~ 
+                      Salinity+Turbid_Level+
+                      (1|Bottle), data=initial_data)
+#No salinity
+model_initial_data_sal=lm(log(Staph_CFU_100mL+1)~
+                    Turbid_Level+(1|Bottle), data=initial_data)
+
+#No turbidity
+model_initial_data_turbid=lm(log(Staph_CFU_100mL+1)~ 
+                      Salinity+(1|Bottle), data=initial_data)
+
+#F-Test
+Anova(model_initial_data)
+
+#Comparing all models to one another
+staph_survival_models_initial=list(model_initial_data,
+                          model_initial_data_sal,
+                           model_initial_data_turbid)
+model.sel(staph_survival_models_initial)
+```
+
+***S. aureus*** **survival calculations and models**
+
+**Model for fresh water, low turbidity**
+
+```{r}
+#log base 10
+Fresh_data <- subset(dat,Salinity %in% c("Fresh"))
+low_turbidity_Fresh_data <- subset(Fresh_data,Turbid_Level %in% c("Low"))
+
+
+model_for_T90_low_turbidity_Fresh <- lm((log(Staph_CFU_100mL+1)) ~ Time_day + (1 | Bottle), data = low_turbidity_Fresh_data)
+summary(model_for_T90_low_turbidity_Fresh)
+plot(allEffects(model_for_T90_low_turbidity_Fresh))
+
+coef(model_for_T90_low_turbidity_Fresh)
+Anova(model_for_T90_low_turbidity_Fresh)
+```
+
+**Model for fresh water, high turbidity**
+
+```{r}
+#log base 10
+#Fresh_data <- subset(dat,Salinity %in% c("Fresh"))
+high_turbidity_Fresh_data <- subset(Fresh_data,Turbid_Level %in% c("High"))
+
+
+model_for_T90_high_turbidity_Fresh <- lm((log(Staph_CFU_100mL+1)) ~ Time_day + (1 | Bottle), data = high_turbidity_Fresh_data)
+summary(model_for_T90_high_turbidity_Fresh)
+plot(allEffects(model_for_T90_high_turbidity_Fresh))
+
+coef(model_for_T90_high_turbidity_Fresh)
+Anova(model_for_T90_high_turbidity_Fresh)
+```
+
+**Model for brackish water, low turbidity**
+
+```{r}
+#log base 10
+brackish_data <- subset(dat,Salinity %in% c("Brackish"))
+low_turbidity_brackish_data <- subset(brackish_data,Turbid_Level %in% c("Low"))
+
+
+model_for_T90_low_turbidity_brackish_lm <- lm((log(Staph_CFU_100mL+1)) ~ Time_day + (1 | Bottle), data = low_turbidity_brackish_data)
+summary(model_for_T90_low_turbidity_brackish_lm)
+plot(allEffects(model_for_T90_low_turbidity_brackish_lm))
+
+coef(model_for_T90_low_turbidity_brackish_lm)
+Anova(model_for_T90_low_turbidity_brackish_lm)
+```
+
+**Model for brackish water, intermediate turbidity**
+
+```{r}
+int_turbidity_brackish_data <- subset(brackish_data,Turbid_Level %in% c("Intermediate"))
+#high turbidity brackish data
+model_for_T90_int_turbidity_brackish_lm <- lm((log(Staph_CFU_100mL+1)) ~ Time_day + (1 | Bottle), data = int_turbidity_brackish_data)
+summary(model_for_T90_int_turbidity_brackish_lm)
+plot(allEffects(model_for_T90_int_turbidity_brackish_lm))
+
+coef(model_for_T90_int_turbidity_brackish_lm)
+Anova(model_for_T90_int_turbidity_brackish_lm)
+```
+
+**Model for brackish water, high turbidity**
+
+```{r}
+
+high_turbidity_brackish_data <- subset(brackish_data,Turbid_Level %in% c("High"))
+
+#high turbidity brackish data
+model_for_T90_high_turbidity_brackish_lm <- lm((log(Staph_CFU_100mL+1)) ~ Time_day + (1 | Bottle), data = high_turbidity_brackish_data)
+summary(model_for_T90_high_turbidity_brackish_lm)
+plot(allEffects(model_for_T90_high_turbidity_brackish_lm))
+
+coef(model_for_T90_high_turbidity_brackish_lm)
+Anova(model_for_T90_high_turbidity_brackish_lm)
+```
+
+**Figure 2 code**
+
+```{r}
+#data averaged over 6 replicates for figure 2
+setwd("/Users/msteadd/Documents/Staph_Survival")
+dat1=read.csv("staph_survival_data.csv", na.strings = ".", header=TRUE)
+head(dat1)
+dat1$site=as.factor(dat1$site)
+```
+
+```{r}
+my_y_title_staph_sand<-expression(paste("Log ", italic("S. aureus"), " CFU/100 mL"))
+
+Figure2=ggplot(dat1, aes(x=time,y=log(staph),
+                        fill=turbid_level,color=turbid_level))+ 
+  geom_point(aes(shape=turbid_level))+
+  geom_smooth(method="lm",se=TRUE,aes(fill=turbid_level))+
+  xlab("Time (Days)")+
+  ylab(my_y_title_staph_sand)+
+  scale_fill_grey(name="Turbidity Level")+
+  scale_color_grey(name="Turbidity Level")+
+  theme_bw()+
+        theme(panel.grid.major = element_blank(),legend.position = "top",
+          panel.grid.minor = element_blank(),        
+          legend.text=element_text(size=25),
+          axis.line  = element_line(colour = "black")) +
+  facet_wrap(~salinity, nrow=2, ncol=2)
+Figure2
+```
